@@ -3,50 +3,20 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"sync/atomic"
+
+	"github.com/AJYoung4/chirpy/api"
 )
-
-func healthzHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
-}
-
-type apiConfig struct {
-	fileserverHits atomic.Int32
-}
-
-func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cfg.fileserverHits.Add(1)
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (cfg *apiConfig) metricsHandler(w http.ResponseWriter, r *http.Request) {
-	hits := cfg.fileserverHits.Load()
-	w.Header().Set("Content-type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(fmt.Sprintf("Hits: %d", hits)))
-}
-
-func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
-	cfg.fileserverHits.Store(0)
-	w.Header().Set("Content-type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Hits counter reset."))
-}
 
 func main() {
 	mux := http.NewServeMux()
-	cfg := apiConfig{}
+	cfg := api.ApiConfig{}
 
 	fs := http.FileServer(http.Dir("."))
-	mux.Handle("/app/", cfg.middlewareMetricsInc(http.StripPrefix("/app/", fs)))
+	mux.Handle("/app/", cfg.MiddlewareMetricsInc(http.StripPrefix("/app/", fs)))
 
-	mux.HandleFunc("GET /healthz", healthzHandler)
-	mux.HandleFunc("GET /metrics", cfg.metricsHandler)
-	mux.HandleFunc("POST /reset", cfg.resetHandler)
+	mux.HandleFunc("GET /api/healthz", api.ReadinessHandler)
+	mux.HandleFunc("GET /admin/metrics", cfg.MetricsHandler)
+	mux.HandleFunc("POST /admin/reset", cfg.ResetHandler)
 
 	server := &http.Server{
 		Addr:    ":8080",
